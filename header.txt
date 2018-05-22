@@ -1,0 +1,7 @@
+-- pilot8
+-- bruno oliveira
+--
+-- this source code is pre-processed
+-- (comments removed and constants inlined)
+-- for the more readable original, check:
+--   https://github.com/btco/pilot8
