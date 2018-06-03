@@ -61,8 +61,13 @@ $code =~ s/ *--.*$//mg;
 
 # Get all #define directives.
 while ($code =~ /^[#]define\s+(\S+)\s+(.*?)$/mg) {
-  $defines{$1} = $2;
-  print STDERR "Define: $1 -> $2\n";
+  $k = $1;
+  $v = $2;
+  chomp $k;
+  chomp $v;
+  $v =~ s/\r//g;
+  $defines{$k} = $v;
+  print STDERR "Define: $k -> $v\n";
 }
 
 # Expand '#define' constants

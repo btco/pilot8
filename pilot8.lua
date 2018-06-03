@@ -6,6 +6,8 @@
 -- all rights reserved
 ---------------------------------------------------
 
+#define k_version "v1.1"
+
 #define k_start_lvl 1
 #define k_start_coins 0
 #define k_debug_allow_kill_all true
@@ -75,9 +77,6 @@ local k_drop_int={300,200}
 -- maximum # of enemy projectiles on the screen
 #define k_max_en_projs 8
 
--- maximum # of enemies on the screen
-#define k_max_enemies 8
-
 -- game modes
 #define k_mode_title 0
 #define k_mode_play 1
@@ -110,7 +109,6 @@ local k_drop_int={300,200}
 #define k_sp_en_delta 43
 #define k_sp_weap_mach 47
 #define k_sp_lvl_start_mark 113  -- level start mark
-#define k_sp_lvl_wave_mark 114  -- wave start mark
 
 -- entity ids that don't correspond to sprites
 -- these must be >1000 to avoid conflict with sprites
@@ -209,7 +207,6 @@ local g_lum=nil
 --    flip: sequence of flips (0=no flip, 1=flip x)
 --    loop: true if loops, false or nil if not
 --     (default false)
-local k_anim_kaboom={div=2,fr={12,13,14,15,16,0}}
 local k_anim_die={div=6,fr={12,13,14,15,16,0}}
 local k_anim_beacon={div=10,fr={0,30,31},loop=true}
 local k_anim_spiky={div=4,fr={26,27},loop=true}
@@ -217,12 +214,10 @@ local k_anim_fireball=
   {div=2,fr={24,24},flip={0,1},loop=true}
 local k_anim_torch={div=8,fr={122,123,123},loop=true}
 local k_anim_lantern={div=8,fr={84,100,116},loop=true}
+local k_anim_muzzle={div=2,fr={87,88,103,104},loop=false}
 
 -- height of level data in map rom, in cells
 #define k_lvl_rom_h 6
-
--- interval before we start each wave of enemies
-#define k_pre_wave_int 30
 
 -- level templates (see below for the meaning of
 -- each field)
@@ -238,6 +233,7 @@ local k_lvl_templ_flood={
   {anim=k_anim_beacon,x=88,y=88},
  },
  rip_clrs=0x11,
+ max_enemies=3,
 }
 local k_lvl_templ_oasis={
  title="oasis city",
@@ -248,6 +244,7 @@ local k_lvl_templ_oasis={
  skfx={{sx=0,sy=72,c=64,r=61,w=16,h=3}},
  sun={x=64,y=134,r=48,clr=15},
  rip_clrs=0xdd,
+ max_enemies=4,
 }
 local k_lvl_templ_marshes={
  title="marshes",
@@ -262,6 +259,7 @@ local k_lvl_templ_marshes={
   {anim=k_anim_lantern,x=96,y=88},
  },
  rain=1,
+ max_enemies=5,
 }
 local k_lvl_templ_coast={
  title="coast",
@@ -277,6 +275,7 @@ local k_lvl_templ_coast={
  sun={x=64,y=114,r=32,clr=7},
  -- beach effect
  owfx={sx=0,sy=96,c=16,r=60,w=16,h=1},
+ max_enemies=5,
 }
 local k_lvl_templ_canals={
  title="canals",
@@ -293,6 +292,7 @@ local k_lvl_templ_canals={
   {anim=k_anim_torch,x=12*8,y=88},
   {anim=k_anim_torch,x=13*8,y=88},
  },
+ max_enemies=6,
 }
 local k_lvl_templ_castle={
  title="castle",
@@ -307,6 +307,7 @@ local k_lvl_templ_castle={
   {anim=k_anim_torch,x=56,y=88},
   {anim=k_anim_torch,x=88,y=88},
  },
+ max_enemies=7,
 }
 
 -- game level definitions.
@@ -331,7 +332,7 @@ local k_lvl_templ_castle={
 --  mapc,mapr: location on world map (in tiles)
 --  rip_clrs: water ripple colors (as a byte
 --    with two colors)
---  num_waves: (computed at runtime) # of waves.
+--  max_enemies: maximum # of enemies on screen
 -- 
 -- how level data is represented:
 --  the level starts at a level start mark
@@ -484,29 +485,29 @@ local g_lvls={
 --     for each possible upgrade level: 0,1,2,3.
 local k_weap_info={
  [k_weap_laser]={
-  init_ammo={-1,-1,-1,-1},
+  init_ammo={-1,-1,-1},
   shot_eid=k_eid_plr_laser,
   off_x={-6,6},off_y=0,
   sfx=k_sfx_fire,
-  fire_cds={15,10,7,5},
+  fire_cds={12,9,6},
   hud_icon=k_sp_weap_laser,
   clr=12,
  },
  [k_weap_dbl]={
-  init_ammo={5,7,10,15},
+  init_ammo={5,7,10},
   shot_eid=k_sp_dbl,
   off_x={-6,6},off_y=0,
   sfx=k_sfx_dbl,
-  fire_cds={20,15,10,10},
+  fire_cds={20,15,10},
   hud_icon=k_sp_weap_dbl,
   clr=11,
  },
  [k_weap_mach]={
-  init_ammo={50,60,70,80},
+  init_ammo={50,60,70},
   shot_eid=k_eid_mach_laser,
   off_x={-6,6},off_y=0,
   sfx=k_sfx_dbl,
-  fire_cds={5,4,3,3},
+  fire_cds={5,4,3},
   hud_icon=k_sp_weap_mach,
   clr=14,
  },
@@ -557,12 +558,6 @@ local k_g_template={
  lvl=nil,  -- initialized later
  -- countdown to execute next level command
  cmd_cd=0,
- -- if true, we are in an interval between successive
- -- enemy waves. when cmd_cd reaches 0, we will start
- -- the next wave.
- pre_wave=false,
- -- current wave#
- cur_wave_no=0,
  -- index of the next command to execute
  -- starts at 0 (0th column of level)
  next_cmd=0,
@@ -578,13 +573,8 @@ local k_g_template={
  drop_cd=k_drop_int[1],
  -- player state:
  x=10,y=40,  -- position
+ vx=0,vy=0,  -- velocity
  facing=1,  -- facing direction 1=right, -1=left
- -- to animate the light effect, this counter
- -- keeps track of "fractionary" facing direction
- -- where 1 means the player is fully facing right,
- -- -1 means fully facing left, and anything in
- -- between is an intermediate state
- facing_frac=1,
  -- translated collision rectangle, computed
  -- after moving the player each frame
  xcr=nil,
@@ -614,6 +604,9 @@ local k_g_template={
  -- if this is not nil, we are in "level ended"
  -- mode and this is the countdown
  end_cd=nil,
+ -- muzzle flash animation cycle counter, nil means
+ -- not currently playing
+ muzzle_cc=nil,
 }
 
 -- color map for the damage state (map all to white)
@@ -656,13 +649,13 @@ local g_sstate={
 #define k_coin_prob 0.5
 
 -- possible upgrade (bit flags)
-#define k_upf_speed        0x0001
+--#define k_upf_speed        0x0001  DEPRECATED
 #define k_upf_rapid_fire_1 0x0002
 #define k_upf_rapid_fire_2 0x0004
-#define k_upf_rapid_fire_3 0x0008
+--#define k_upf_rapid_fire_3 0x0008  DEPRECATED
 #define k_upf_ammo_1       0x0010
 #define k_upf_ammo_2       0x0020
-#define k_upf_ammo_3       0x0040
+--#define k_upf_ammo_3       0x0040  DEPRECATED
 #define k_upf_shield_1     0x0080
 #define k_upf_shield_2     0x0100
 #define k_upf_shield_3     0x0200
@@ -680,82 +673,62 @@ local g_sstate={
 --     been purchased.
 local k_upgrade_entries={
  {
-  upf=k_upf_speed,
-  title="speed boost",
-  desc="fly faster",
-  price=20,
- },
- {
   upf=k_upf_rapid_fire_1,
   title="rapid fire i",
   desc="faster lasers",
-  price=20,
+  price=10,
  },
  {
   upf=k_upf_rapid_fire_2,
   title="rapid fire ii",
   desc="even faster lasers",
-  price=40,
+  price=20,
   dep=k_upf_rapid_fire_1,
- },
- {
-  upf=k_upf_rapid_fire_3,
-  title="rapid fire iii",
-  desc="the fastest lasers",
-  price=80,
-  dep=k_upf_rapid_fire_2,
  },
  {
   upf=k_upf_ammo_1,
   title="ammo i",
   desc="increased ammo",
-  price=30,
+  price=10,
  },
  {
   upf=k_upf_ammo_2,
   title="ammo ii",
   desc="even more ammo",
-  price=50,
+  price=20,
   dep=k_upf_ammo_1,
- },
- {
-  upf=k_upf_ammo_3,
-  title="ammo iii",
-  desc="lots of ammo",
-  price=70,
-  dep=k_upf_ammo_2,
  },
  {
   upf=k_upf_shield_1,
   title="shield i",
   desc="start with shield",
-  price=50,
+  price=15,
  },
  {
   upf=k_upf_shield_2,
   title="shield ii",
   desc="start with 2x shield",
-  price=80,
+  price=20,
   dep=k_upf_shield_1,
  },
  {
   upf=k_upf_shield_3,
   title="shield iii",
   desc="start with 3x shield",
-  price=100,
+  price=30,
   dep=k_upf_shield_2,
  },
  {
   upf=k_upf_start_dbl,
   title="green laser",
   desc="start with green laser",
-  price=90,
+  price=30,
  },
  {
   upf=k_upf_pwup_int,
   title="more powerups",
   desc="get powerups more often",
-  price=90,
+  price=15,
  },
 }
 
@@ -881,9 +854,8 @@ local g_ent_defs={
  },
  -- explosion sprite
  [k_sp_kaboom]={
-  sp=0,
-  em_anim=k_anim_kaboom,
-  ttl=40,
+  sp=0, -- hack: rendering for k_sp_kaboom is hard-coded
+  ttl=5,
   vx=-1,vx_div=2,
  },
  -- enemy boat
@@ -1094,12 +1066,9 @@ function init_lvls()
     last_lvl=g_lvls[lvl_no]
     last_lvl.mc0=c
     last_lvl.mr0=r
-    last_lvl.num_waves=1
    elseif t==k_sp_meta0+15 and last_lvl then
     -- end level
     last_lvl=nil
-   elseif t==k_sp_lvl_wave_mark and last_lvl then
-    last_lvl.num_waves+=1
    end
   end
   last_lvl=nil
@@ -1513,10 +1482,12 @@ function update_plr()
  if g.hurt_cd>flr(k_plr_hurt_dur/2) then
   dx,dy=-1,0
  else
-  dx,dy=get_dpad()
-  local spd=has_upgrade(k_upf_speed) and 2 or 1
-  dx*=spd
-  dy*=spd
+  local ax,ay=get_dpad()
+  if g_clk%2==0 then
+   g.vx=apply_acc(g.vx,ax)
+   g.vy=apply_acc(g.vy,ay)
+  end
+  dx,dy=g.vx,g.vy
  end
 
  g.x=mid(g.x+dx,k_plr_min_x,k_plr_max_x)
@@ -1535,12 +1506,12 @@ function update_plr()
 
  -- update clip rect
  g.lit_clip=rect_xlate(k_lit_clip_r,g.x,g.y)
- -- if player is facing left, correct the rect
- g.lit_clip.x+=interp(1,0,-1,k_lit_clip_xleft,g.facing_frac)
- -- update the "fractionary" facing (used for
- -- lighting animation).
- --g.facing_frac=
-   --mid(-1,1,g.facing_frac+(g.facing*0.2))
+ if g.muzzle_cc then
+  g.muzzle_cc+=1
+  if g.muzzle_cc>k_anim_muzzle.div*#k_anim_muzzle.fr then
+   g.muzzle_cc=nil
+  end
+ end
 end
 
 function fire()
@@ -1557,6 +1528,8 @@ function fire()
  -- get the fire countdown, depending on the level
  -- of the "rapid fire" upgrade
  g.fire_cd=wi.fire_cds[upg_lvl+1]
+ -- start muzzle flash animation
+ g.muzzle_cc=0
  -- deduct ammo, except if ammo is infinite
  if g.ammo>0 then
   -- ammo is finite, so deduct one
@@ -1569,14 +1542,12 @@ function fire()
 end
 
 function get_rapid_fire_upg_lvl()
- return has_upgrade(k_upf_rapid_fire_3) and 3 or
-   has_upgrade(k_upf_rapid_fire_2) and 2 or
+ return has_upgrade(k_upf_rapid_fire_2) and 2 or
    has_upgrade(k_upf_rapid_fire_1) and 1 or 0
 end
 
 function get_ammo_upg_lvl()
- return has_upgrade(k_upf_ammo_3) and 3 or
-   has_upgrade(k_upf_ammo_2) and 2 or
+ return has_upgrade(k_upf_ammo_2) and 2 or
    has_upgrade(k_upf_ammo_1) and 1 or 0
 end
 
@@ -1599,34 +1570,10 @@ function lvl_exec_next_cmd()
 
  -- get special marker from top row
  local marker=c0<128 and mget(c0,r0) or k_sp_lvl_start_mark
- -- the level start marker at the start of a level
- -- is equivalent to the "start wave" marker (it
- -- marks the first wave).
- if g.next_cmd==0 then marker=k_sp_lvl_wave_mark end
-
- if marker==k_sp_lvl_wave_mark then
-  -- it's a "wave start" mark.
-  if not g.pre_wave then
-   -- we were not already in "pre-wave" state,
-   -- so check if we should enter it.
-   if g.num_enemies>0 then
-    -- wait until there are no enemies left.
-    g.cmd_cd=15  -- snooze
-    return
-   end
-   -- enter the pre-wave state where we count down
-   -- to start the next wave
-   g.cur_wave_no+=1
-   g.pre_wave=true
-   g.cmd_cd=k_pre_wave_int
-   return
-  else
-   -- we were already in the pre-wave state, so
-   -- now it's time to start the wave for real.
-   g.pre_wave=false
-   -- (fall through)
-  end
- elseif marker==k_sp_lvl_start_mark or
+ 
+ -- if we find a level start mark or an 'F' mark,
+ -- it means the level has ended.
+ if g.next_cmd>0 and marker==k_sp_lvl_start_mark or
      marker==k_sp_meta0+15 then
   -- this is the end of the level
   if can_end_lvl() then
@@ -1676,7 +1623,10 @@ function lvl_spawn(c0,r0)
   end
  end
  -- if this would go over budget, wait
- if count+g.num_enemies>k_max_enemies then
+ -- (the g.num_enemies>0 test is there to prevent us
+ -- from blocking forever when spawning a set of 4
+ -- enemies on a level with max 3 enemies).
+ if g.num_enemies>0 and count+g.num_enemies>g.lvl.max_enemies then
   return false
  end
  -- instantiate each tile as an entity
@@ -1696,8 +1646,7 @@ end
 
 function is_spawnable(eid)
  return eid>0 and not meta_value(eid) and
-   eid~=k_sp_lvl_start_mark and
-   eid~=k_sp_lvl_wave_mark
+   eid~=k_sp_lvl_start_mark
 end
 
 function _draw()
@@ -1829,6 +1778,9 @@ function draw_plr()
  else
   spr(k_sp_plr,g.x,g.y,1,1,g.facing<0)
  end
+ if g.muzzle_cc then
+  draw_anim(k_anim_muzzle,g.x+4,g.y-1,g.muzzle_cc)
+ end
 end
 
 -- draws the given entity
@@ -1842,7 +1794,9 @@ function draw_ent(e,is_emi)
  end
 
  if is_emi then
-  if e.dmg_cd>0 then
+  if e.eid==k_sp_kaboom then
+   draw_kaboom(e.x,e.y,e.age)
+  elseif e.dmg_cd>0 then
    draw_spr(e.sp,e.x,e.y,k_dmg_cmap,e.facing>0)
   elseif e.em_anim then
    draw_anim(e.em_anim,e.x,e.y,e.age,e.cmap,e.facing>0) 
@@ -1855,6 +1809,12 @@ function draw_ent(e,is_emi)
   else
    draw_spr(e.sp,e.x,e.y,e.cmap,e.facing>0)
   end
+ end
+end
+
+function draw_kaboom(x,y,age)
+ if age<10 then
+  circfill(x+4,y+4,4+flr(age/2),min(10,7+flr(age/2)))
  end
 end
 
@@ -1932,11 +1892,6 @@ function draw_hud()
 
  -- draw coins
  draw_coins()
-
- if g.pre_wave then
-  print_c("wave " .. g.cur_wave_no .. "/" .. g.lvl.num_waves,
-    64,10,7)
- end
 end
 
 function draw_coins()
@@ -1967,6 +1922,7 @@ function draw_title()
  if g_clk>40 and band_nz(g_clk,8) then
   print_with_btn("press \142 [z]",42,110,7)
  end
+ print(k_version,110,1,5)
 end
 
 function draw_logo(y)
@@ -1986,7 +1942,7 @@ end
 function draw_dying()
  local clr_seq={0,0,0,1,2,4,9,10}
  draw_play()
- draw_anim(k_anim_die,g.x,g.y,g_clk)
+ draw_kaboom(g.x,g.y,g_clk)
  print_c("you died",64,20,
    clr_seq[min(#clr_seq,1+flr(g_clk/2))])
 end
@@ -2153,23 +2109,16 @@ function postproc_light()
  x0,xf=mid(x0,0,127),mid(xf+1,0,127)
  y0,yf=mid(y0,0,127),mid(yf+1,0,127)
 
- -- eccentricity animation
- --local ecc=interp(
- --  0,1.0,1,k_light_ecc,abs(g.facing_frac))
- local ecc=k_light_ecc
-
  for y=y0,yf do
   local dy=py-y
   local ptr=0x6000+y*64 -- 64 bytes per display row
   ptr+=flr(x0/2) -- start at the right column
   for x=x0,xf,2 do
    local dx=x-px
-   local ahead
-   if g.facing_frac>0 then ahead=dx>0 else ahead=dx<0 end
    -- ugly hack to make the light beam more oval
    -- shaped and focusing forward
-   if abs(dy)<k_light_ecc_cutoff and ahead then
-    dx*=ecc
+   if abs(dy)<k_light_ecc_cutoff and dx>0 then
+    dx*=k_light_ecc
    end
    local dist=dx*dx+dy*dy
    local light_lvl=flr(5-dist*k_light_falloff)
@@ -2272,6 +2221,9 @@ function ent_update(e)
  -- part of the screen faster.
  if e.enemy and e.x>110 then
   e.x=e.x-(e.x>120 and 2 or 1)
+ elseif e.dmg_cd and e.dmg_cd>0 then
+  -- enemy is being pushed back from a recent impact
+  e.x+=1
  else
   -- apply velocity
   e.x=e.x+(
@@ -2664,6 +2616,11 @@ function draw_win()
   print_stats(base_y+40)
   print("that's pretty impressive, you\nshould post a screenshot",2,100,5)
  end
+end
+
+-- applies acceleration to velocity, braking if a is 0
+function apply_acc(v,a)
+ return a~=0 and mid(v+a,-2,2) or sgn(v)*flr(abs(v)/2)
 end
 
 -- update/draw functions for each game mode
